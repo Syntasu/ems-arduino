@@ -209,17 +209,13 @@ bool parseHeader(String header, int &a, int &v)
     }
     else
     {      
-      Serial.println(1);
       return false;
     }
   }
   else
   {
-    Serial.println(0);
     return false;
   }
-
-  Serial.println(val);
 
   //Check if the values equals some value indicating a state.
   if(val == "0" || val == "uit" || val == "off" || val == "false")
@@ -232,11 +228,9 @@ bool parseHeader(String header, int &a, int &v)
   }
   else
   {
-    Serial.println(2);
     return false;
   }
-
-  Serial.println(3);
+  
   return true;
   
 }

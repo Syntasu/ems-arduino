@@ -40,8 +40,8 @@ A: Ik heb een meeting verricht van de nauwkeurigheid, ik heb de sensor geplaatst
 */
 
 #include <math.h>
-#define TRIGGER_PIN 10
-#define ECHO_PIN 9
+#define TRIGGER_PIN 9
+#define ECHO_PIN 10
 
 void setup() 
 {
@@ -88,6 +88,7 @@ void SetTrigger()
 int ReadEcho()
 {
   int timePulse = pulseIn(ECHO_PIN, HIGH);
+  Serial.println(timePulse);
   return timePulse;
 }
 
