@@ -12,7 +12,7 @@ A: 340 m/s is de snelheid van het geluiden, dit is cruciaal voor de berekening m
    Het wordt door tweeen gedeeld om dat we hier te maken hebben met een "round trip", wat betekent dat het geluid 2 keer weerkaatst wordt.
 
 Q: Wat zijn (bij benadering) de minimale en de maximale meetafstand?
-A: Volgens mijn eigen metingen ligt het bereik tussen 5 cm en 250cm.
+A: Volgens mijn eigen metingen ligt het bereik tussen 5 cm en 200cm.
 
 Q: Wat is de nauwkeurigheid (in cm.)?
 A: Ik heb een meeting verricht van de nauwkeurigheid, ik heb de sensor geplaatst op de 0 cm punt van een lineaal en een object op 10cm.
@@ -37,64 +37,166 @@ A: Ik heb een meeting verricht van de nauwkeurigheid, ik heb de sensor geplaatst
    6.41% - 10.18cm
 
    De sensor heeft ongeveer ~0.1cm afwijking op een afstand van 10 cm.
+
+Q: Hoe stel je in je programma wanneer de sensor geen bereik heeft?
+A: We zetten een timeout op de pulse in, wanneer de timeout verstreken is sturen we -1 terug.
+   De maximale afstand (op basis van de specificatie is 500 cm. Geluid beweegt 343 m/s voort.
+   Maar wij meten in cm, dus 343 * 100 = 34300 cm/s. Maar wij meten niet in seconden maar microseconden (pulseIn).
+   In 1 second zit 1000000 msec. Om van cm/s naar cm/us kunnen we zeggen 34300 / 1000000 = 0.343 cm/msec.
+
+   We weten dan de sensor een maximaal bereik heeft van 500 cm, om het maximale aantal msec dat we willen wachten op de pulse(In) is als volgt:
+   500 / 0,0343 = 14577 msec. Omdat de uiterste van het bereik vaak onstabel, kunnen we die cijfer mooi afronden zodat we niet in ide
+   instabiele gebieden kom. Laten we 14000 msec zeggen. Omdat we heen en weer gaan, moeten we de timeout met twee vermenigvuldigen. Dus 28000 msec
 */
 
-#include <math.h>
-#define TRIGGER_PIN 9
-#define ECHO_PIN 10
+//Min and max distance in centimeters
+#define MIN_DIST 8
+#define MAX_DIST 200
+
+#define INT_MAX 32767
+#define INT_MIN -32767
+
+int ledPinCount = 0;
+int ledPins[] = { 5, 4, 3 };
+int ranges[] = { MIN_DIST, 125, MAX_DIST - 5 };
+
+//0 = 
+
 
 void setup() 
 {
-  pinMode(TRIGGER_PIN, OUTPUT);
-  pinMode(ECHO_PIN, INPUT);
-
+  ledPinCount = sizeof(ledPins) / sizeof(int);
   Serial.begin(9600);
 }
 
+int i = -10;
 void loop() 
 {
-  ClearTrigger();
-  SetTrigger();
+  int dist = 0;
+#if 0
+  dist = i++;
+#else if
+  dist = distanceAv(12, 11);
+#endif
 
-  int t = ReadEcho();
+  Serial.println(dist);
   
-  if(t > 0)
+  // We got a reasonable reading.
+  if(dist > 0)
   {
-    float cm = ToCentimeters(t);
-    Serial.print(cm);
-    Serial.println(" centimeters");
+    writeValueToLeds(dist);
+  }
+  //We are out of range or too close.
+  else
+  {
+    writeOutOfRangeToLeds();
+  }
+}
+int distance(int trig, int echo)
+{
+  //Setup pins if we already have set it. ( required for multiple sensors :) )
+  pinMode(trig, OUTPUT);
+  pinMode(echo, INPUT);
+
+  delay(1);
+  
+  //Clear the trigger pin.
+  digitalWrite(trig, LOW);
+  delayMicroseconds(2);
+
+  //Send a 10 msec pulse
+  digitalWrite(trig, HIGH);
+  delayMicroseconds(10);
+  digitalWrite(trig, LOW);
+
+  unsigned long timeout = (MAX_DIST / 0.0343f) * 2.2f; //(0.2f for 20% margin).
+
+  //Returns the time in microseconds.
+  int pulse = pulseIn(echo, HIGH, timeout);
+  
+  if(pulse == 0)
+  {
+    //We did not find a distance, return -1;
+    return -1;
   }
   else
   {
-    Serial.println("Out of range.");
+    //Return in centimeters
+    return pulse * 0.0343f / 2;
+  }
+}
+
+int distanceAv(int trig, int echo)
+{
+  int minValue = INT_MAX;
+  int maxValue = INT_MIN;
+  int count = 0;
+
+  //Take 6 samples, store min max.
+  for(int i = 0; i < 6; i++)
+  {
+    int dist = distance(trig, echo);
+
+    //Store lowest value.
+    if(dist < minValue)
+    {
+      minValue = dist;
+    }
+
+    //Store max value.
+    if(dist > maxValue)
+    {
+      maxValue = dist;
+    }
+
+    count += dist;
   }
   
-  delay(250);
+  //Remove the most significat and insignificant value and divide by 4 samples 
+  //(because we removed 2).
+  return (count - (minValue + maxValue)) / 4;
 }
 
-void ClearTrigger()
+void writeValueToLeds(int cm)
 {
-  digitalWrite(TRIGGER_PIN, LOW);
-  delayMicroseconds(2);
+  int ledCount = 0;
+  for(int range : ranges)
+  {
+    if(cm >= range)
+    {
+      ledCount++;
+    }
+  }
+
+  for(int i = 0; i < ledPinCount; i++)
+  {
+    digitalWrite(ledPins[i], i < ledCount);
+  }
+
+  delay(100);
 }
 
-void SetTrigger()
+void writeOutOfRangeToLeds()
 {
-  digitalWrite(TRIGGER_PIN, HIGH);
-  delayMicroseconds(10);
-  digitalWrite(TRIGGER_PIN, LOW);
-}
+  for(int b = 0; b < 10; b++)
+  {
+    if(b % 2 == 0)
+    {
+      for(int i = 0; i < ledPinCount; i++)
+      {
+          digitalWrite(ledPins[i], i % 2 == 0);
+      }
+    }
+    else
+    {
+      for(int i = 0; i < ledPinCount; i++)
+      {
+         digitalWrite(ledPins[i], i % 2 != 0);
+      }
+    }
 
-int ReadEcho()
-{
-  int timePulse = pulseIn(ECHO_PIN, HIGH);
-  Serial.println(timePulse);
-  return timePulse;
-}
-
-float ToCentimeters(int t)
-{
-  return t * 0.034f / 2;
+    delay(100);
+  }
 }
 
 

@@ -1,7 +1,7 @@
 #include <SPI.h>
 #include <Ethernet.h>
 
-#define SRV_PORT 32819
+#define SRV_PORT 43748
 
 //Server configuration
 IPAddress ip = IPAddress(192, 168, 1, 16);
@@ -49,7 +49,45 @@ void loop()
     
     if(ReadClient(client, message, len))
     {
-      Serial.println(message);
+      int type = -1;
+      String arg0, arg1, arg2, ret;
+      
+      handleIncomingMessage(message, len, type, arg0, arg1, arg2);
+
+      switch(type)
+      {
+        case -1:
+          Serial.println("Failed to parse message.");
+          break;
+        case 0:
+          ret = doHandshake();
+          break;
+        case 2:
+          //doSetDigitalPin();
+          break;
+        case 4:
+          //doSetAnalogPin();
+          break;
+        case 8:
+          ret = readDigitalPin(arg0);
+          break;
+        case 32:
+          ret = readAnalogPin(arg0);
+          break;
+        case 128:
+          ret = doGetPinList();
+          break;
+        default:
+          Serial.print("Received unknown message:");
+          Serial.println(type);
+          break;
+      }
+
+      if(ret != "")
+      {
+        //Serial.print("Returned data to client...");
+        client.print(ret);
+      }
     }
     else
     {
@@ -58,9 +96,83 @@ void loop()
   }
 
   delay(1);
-
 }
 
+String readAnalogPin(String arg0)
+{
+  int pin = arg0.toInt();
+  int value = analogRead(pin);
+  
+  return "64;" + String(value);
+}
+
+String readDigitalPin(String arg0)
+{
+  int pin = arg0.toInt();
+  int value = digitalRead(pin);
+  
+  return "16;" + String(value);
+}
+
+String doHandshake()
+{
+  Serial.println("Received handshake from client...");
+  return "1;ok";
+}
+
+String doGetPinList()
+{
+  String result = "";
+  
+  for(int i = 0; i <= 13; i++)
+  {
+    result += "D";
+    result += String(i);
+    result += ":";
+    result += String(digitalRead(i));
+    result += "-";
+  }
+
+  for(int n = 0; n <= 5; n++)
+  {
+    result += "A";
+    result += String(n);
+    result += ":";
+    result += String(analogRead(n));
+
+    //Don't include last one...
+    if(n != 5)
+    {
+      result += "-";
+    }
+  }
+
+  return "256;" + result;
+}
+
+void handleIncomingMessage(String message, int len, int &type, String &a0, String &a1, String &a2)
+{
+  //Convert a string object to a C string.
+  char buf[256];
+  message.toCharArray(buf, sizeof(buf));
+
+  //Split by semicolon
+  int counter = 0;
+  char *p = buf;
+  char *str;
+  while ((str = strtok_r(p, ";", &p)) != NULL)
+  {
+    String value = String(str);
+    
+    if(counter == 0) type = value.toInt();
+    if(counter == 1) a0 = value;
+    if(counter == 2) a1 = value;
+    if(counter == 3) a2 = value;
+    if(counter > 3) break;
+
+    counter++;
+  }
+}
 bool GetClient(EthernetClient &client)
 {
   EthernetClient acceptedClient = server.available();
@@ -71,7 +183,7 @@ bool GetClient(EthernetClient &client)
     return false;
   }
 
-  Serial.println("Accepted a new client...");
+  Serial.println("New data received...");
   
   client = acceptedClient;
   return true;
@@ -96,12 +208,10 @@ bool ReadClient(EthernetClient client, String &message, int &len)
 
     //Null terminate the character array..
     buffer[counter] = '\0';
-
+    
     //Ensure we actually read something...
     if(counter > 0)
     {
-      Serial.println(buffer);
-
       message = String(buffer);
       len = counter;
       return true;
@@ -111,6 +221,5 @@ bool ReadClient(EthernetClient client, String &message, int &len)
     len = 0;
     return false;
   }
-  
 }
 
